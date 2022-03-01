@@ -81,5 +81,5 @@ target_include_directories(hdf5_iotest
   SYSTEM PUBLIC ${HDF5_IOTEST_EXT_INCLUDE_DEPENDENCIES}
 )
 target_link_libraries(hdf5_iotest
-  ${HDF5_IOTEST_EXT_PKG_DEPENDENCIES}
+  ${HDF5_IOTEST_EXT_PKG_DEPENDENCIES} hdf5_hermes_vfd
 )

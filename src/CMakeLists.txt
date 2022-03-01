@@ -83,3 +83,5 @@ target_include_directories(hdf5_iotest
 target_link_libraries(hdf5_iotest
   ${HDF5_IOTEST_EXT_PKG_DEPENDENCIES} hdf5_hermes_vfd
 )
+
+install(TARGETS hdf5_iotest DESTINATION bin)

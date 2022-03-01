@@ -23,14 +23,16 @@
  *
  */
 
-hid_t create_dcpl(const configuration* config)
+hid_t create_dcpl(const configuration* config, unsigned int coll_mpi_io_flg)
 {
   hid_t result;
+  herr_t status;
   unsigned int strong_scaling_flg, step_first_flg, chunked_flg;
   unsigned long total_rows, total_cols, my_rows, my_cols;
   hsize_t cdims[H5S_MAX_RANK];
 
-  assert((result = H5Pcreate(H5P_DATASET_CREATE)) >= 0);
+  result = H5Pcreate(H5P_DATASET_CREATE);
+  assert(result >= 0);
 
   strong_scaling_flg = (strncmp(config->scaling, "strong", 16) == 0);
   total_rows = strong_scaling_flg ?
@@ -74,15 +76,36 @@ hid_t create_dcpl(const configuration* config)
           break;
         }
 
-      assert(H5Pset_chunk(result, config->rank, cdims) >= 0);
-    }
-  else
-    assert(H5Pset_layout(result, H5D_CONTIGUOUS) >= 0);
+      status = H5Pset_chunk(result, config->rank, cdims);
+      assert(status >= 0);
 
-  if (strncmp(config->fill_values, "false", 8) == 0)
-    assert(H5Pset_fill_time(result, H5D_FILL_TIME_NEVER) >= 0);
-  else
-    assert(H5Pset_fill_time(result, H5D_FILL_TIME_ALLOC) >= 0);
+      /* apply compression:
+       * parallel compression only works for collective
+       */
+      if( config->proc_rows*config->proc_cols == 1  ||  coll_mpi_io_flg == 1) {
+        if (strncmp(config->compress_type, "gzip", 16) == 0) {
+          status = H5Pset_deflate(result, config->compress_par[0]);
+          assert(status >= 0);
+        } else if (strncmp(config->compress_type, "szip", 16) == 0) {
+          status = H5Pset_szip(result, config->compress_par[0], config->compress_par[1]);
+          assert(status >= 0);
+        }
+      }
+
+    }
+  else {
+    status = H5Pset_layout(result, H5D_CONTIGUOUS);
+    assert(status >= 0);
+  }
+
+  if (strncmp(config->fill_values, "false", 8) == 0) {
+    status = H5Pset_fill_time(result, H5D_FILL_TIME_NEVER);
+    assert(status >= 0);
+  }
+  else {
+    status = H5Pset_fill_time(result, H5D_FILL_TIME_ALLOC);
+    assert(status >= 0);
+  }
 
   return result;
 }
@@ -147,7 +170,8 @@ static hid_t create_fspace(const configuration* config)
       break;
     }
 
-  assert((result = H5Screate_simple(config->rank, dims, max_dims)) >= 0);
+  result = H5Screate_simple(config->rank, dims, max_dims);
+  assert(result >= 0);
 
   return result;
 }
@@ -160,15 +184,26 @@ static hid_t create_fspace(const configuration* config)
  */
 
 hid_t create_dataset(const configuration* config, hid_t file, const char* name,
-                     hid_t lcpl, hid_t dapl)
+                     hid_t lcpl, hid_t dapl, unsigned int coll_mpi_io_flg)
 {
   hid_t result, fspace, dcpl;
-  assert((dcpl = create_dcpl(config)) >= 0);
-  assert((fspace = create_fspace(config)) >= 0);
-  assert((result = H5Dcreate(file, name, H5T_NATIVE_DOUBLE, fspace,
-                             lcpl, dcpl, dapl)) >= 0);
-  assert(H5Sclose(fspace) >= 0);
-  assert(H5Pclose(dcpl) >= 0);
+  herr_t status;
+
+  dcpl = create_dcpl(config, coll_mpi_io_flg);
+  assert(dcpl >= 0);
+
+  fspace = create_fspace(config);
+  assert(fspace >= 0);
+
+  result = H5Dcreate(file, name, H5T_NATIVE_DOUBLE, fspace, lcpl, dcpl, dapl);
+  assert(result >= 0);
+
+  status = H5Sclose(fspace);
+  assert(status >= 0);
+
+  status = H5Pclose(dcpl);
+  assert(status >= 0);
+
   return result;
 }
 
@@ -187,6 +222,7 @@ int create_selection(const configuration* config,
                      const unsigned int array)
 {
   hid_t result = 0;
+  herr_t status;
   unsigned int strong_scaling_flg, step_first_flg;
   unsigned long my_rows, my_cols;
   hsize_t start[H5S_MAX_RANK], count[H5S_MAX_RANK], block[H5S_MAX_RANK];
@@ -232,9 +268,12 @@ int create_selection(const configuration* config,
       break;
     }
 
-  assert(H5Sselect_none(fspace) >= 0);
-  assert(H5Sselect_hyperslab(fspace, H5S_SELECT_SET, start, NULL, count, block)
-         >= 0);
+  status = H5Sselect_none(fspace);
+  assert(status >= 0);
+
+  status = H5Sselect_hyperslab(fspace, H5S_SELECT_SET, start, NULL, count, block);
+  assert(status >= 0);
+
   return result;
 }
 
